@@ -682,11 +682,12 @@ bool CoarseTracker::trackNewestCoarse(
 		if(lastResiduals[lvl] > 1.5*minResForAbort[lvl]) return false;
 
 
-		if(levelCutoffRepeat > 1 && !haveRepeated)
-		{
+		if (levelCutoffRepeat > 1 && !haveRepeated) {
 			lvl++;
-			haveRepeated=true;
-			printf("REPEAT LEVEL!\n");
+			haveRepeated = true;
+			if (debugPrint) {
+				printf("REPEAT LEVEL!\n");
+			}
 		}
 	}
 
