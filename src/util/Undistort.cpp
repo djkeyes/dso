@@ -261,6 +261,9 @@ Undistort::~Undistort()
 {
 	if(remapX != 0) delete[] remapX;
 	if(remapY != 0) delete[] remapY;
+
+	if (photometricUndist != 0)
+		delete photometricUndist;
 }
 
 Undistort* Undistort::getUndistorterForFile(std::string configFilename, std::string gammaFilename, std::string vignetteFilename)

@@ -255,6 +255,7 @@ private:
 			if(databuffer==0) databuffer = new char[widthOrg*heightOrg*6+10000];
 			zip_file_t* fle = zip_fopen(ziparchive, files[id].c_str(), 0);
 			long readbytes = zip_fread(fle, databuffer, (long)widthOrg*heightOrg*6+10000);
+			zip_fclose(fle);
 
 			if(readbytes > (long)widthOrg*heightOrg*6)
 			{
@@ -269,6 +270,7 @@ private:
 					printf("buffer still to small (read %ld/%ld). abort.\n", readbytes,(long)widthOrg*heightOrg*30+10000);
 					exit(1);
 				}
+				zip_fclose(fle);
 			}
 
 			return IOWrap::readStreamBW_8U(databuffer, readbytes);

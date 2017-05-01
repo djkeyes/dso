@@ -206,6 +206,9 @@ FullSystem::~FullSystem()
 	delete coarseInitializer;
 	delete pixelSelector;
 	delete ef;
+
+	for (FrameHessian* fh : frameHessians)
+		delete fh;
 }
 
 void FullSystem::setOriginalCalib(const VecXf &originalCalib, int originalW, int originalH)
