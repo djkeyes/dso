@@ -61,7 +61,9 @@ PointFrameResidual::~PointFrameResidual(){assert(efResidual==0); instanceCounter
 PointFrameResidual::PointFrameResidual(PointHessian* point_, FrameHessian* host_, FrameHessian* target_) :
 	point(point_),
 	host(host_),
-	target(target_)
+	target(target_),
+	hostIncomingId(host_->shell->incoming_id),
+	targetIncomingId(target_->shell->incoming_id)
 {
 	efResidual=0;
 	instanceCounter++;

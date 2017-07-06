@@ -75,6 +75,7 @@ public:
 	FrameHessian* host;
 	FrameHessian* target;
 	RawResidualJacobian* J;
+	int hostIncomingId, targetIncomingId;
 
 
 	bool isNew;
