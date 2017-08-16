@@ -62,6 +62,8 @@ extern float setting_maxAffineWeight;
 extern float setting_kfGlobalWeight;
 
 
+extern bool setting_useCoarserTracking;
+
 
 extern float setting_idepthFixPrior;
 extern float setting_idepthFixPriorMargFac;

@@ -55,6 +55,7 @@
 #include "util/ImageAndExposure.h"
 
 #include <cmath>
+#include <random>
 
 namespace dso
 {
@@ -307,15 +308,44 @@ Vec4 FullSystem::trackNewCoarse(FrameHessian* fh)
 		// get last delta-movement.
 		lastF_2_fh_tries.push_back(fh_2_slast.inverse() * lastF_2_slast);	// assume constant motion.
 		lastF_2_fh_tries.push_back(fh_2_slast.inverse() * fh_2_slast.inverse() * lastF_2_slast);	// assume double motion (frame skipped)
-		lastF_2_fh_tries.push_back(SE3::exp(fh_2_slast.log()*0.5).inverse() * lastF_2_slast); // assume half motion.
+    lastF_2_fh_tries.push_back(SE3::exp(fh_2_slast.log()*0.5).inverse() * lastF_2_slast); // assume half motion.
+    if(setting_useCoarserTracking) {
+      lastF_2_fh_tries.push_back(fh_2_slast.inverse() * fh_2_slast.inverse() * fh_2_slast.inverse() * fh_2_slast.inverse() * lastF_2_slast);  // assume quadrouple motion (many skipped)
+      lastF_2_fh_tries.push_back(SE3::exp(fh_2_slast.log()*0.25).inverse() * lastF_2_slast); // assume quarter motion.
+      lastF_2_fh_tries.push_back(SE3::exp(-fh_2_slast.log()*0.5).inverse() * lastF_2_slast); // assume backward half motion. (shaky camera?)
+      lastF_2_fh_tries.push_back(SE3::exp(-fh_2_slast.log()).inverse() * lastF_2_slast); // assume backward motion. (shaky camera?)
+    }
 		lastF_2_fh_tries.push_back(lastF_2_slast); // assume zero motion.
 		lastF_2_fh_tries.push_back(SE3()); // assume zero motion FROM KF.
 
+		if(setting_useCoarserTracking) {
+		  // assume random motion from slast
+		  double norm = fh_2_slast.translation().norm();
+		  for(int i=0; i < 100; ++i) {
+		    for(float scale = 0.125; scale <= 8.01; scale *= 2.0) {
+		      std::default_random_engine generator;
+		      std::normal_distribution<double> distribution(0.0, 1.0);
+
+		      Vec3 rand(distribution(generator), distribution(generator), distribution(generator));
+		      rand = rand.normalized() * norm * scale;
+          lastF_2_fh_tries.push_back( lastF_2_slast * SE3(fh_2_slast.unit_quaternion(), rand));
+          lastF_2_fh_tries.push_back( lastF_2_slast * SE3(Sophus::Quaterniond(1,0,0,0), rand));
+          lastF_2_fh_tries.push_back( SE3(fh_2_slast.unit_quaternion(), rand)*lastF_2_slast);
+          lastF_2_fh_tries.push_back( SE3(Sophus::Quaterniond(1,0,0,0), rand)*lastF_2_slast);
+		    }
+		  }
+		}
 
 		// just try a TON of different initializations (all rotations). In the end,
 		// if they don't work they will only be tried on the coarsest level, which is super fast anyway.
 		// also, if tracking rails here we loose, so we really, really want to avoid that.
-		for(float rotDelta=0.02; rotDelta < 0.05; rotDelta++)
+		float increment = 1;
+		float maxrot = 0.1;
+		if(setting_useCoarserTracking){
+		  increment = 0.01;
+		  maxrot = 0.5;
+		}
+		for(float rotDelta=0.02; rotDelta < maxrot; rotDelta+= increment)
 		{
 			lastF_2_fh_tries.push_back(fh_2_slast.inverse() * lastF_2_slast * SE3(Sophus::Quaterniond(1,rotDelta,0,0), Vec3(0,0,0)));			// assume constant motion.
 			lastF_2_fh_tries.push_back(fh_2_slast.inverse() * lastF_2_slast * SE3(Sophus::Quaterniond(1,0,rotDelta,0), Vec3(0,0,0)));			// assume constant motion.
