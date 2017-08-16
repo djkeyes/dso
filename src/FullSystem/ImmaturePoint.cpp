@@ -251,10 +251,9 @@ ImmaturePointStatus ImmaturePoint::traceOn(FrameHessian* frame,const Mat33f &hos
 
 
 
-	float errors[100];
+	std::vector<float> errors;
 	float bestU=0, bestV=0, bestEnergy=1e10;
 	int bestIdx=-1;
-	if(numSteps >= 100) numSteps = 99;
 
 	for(int i=0;i<numSteps;i++)
 	{
@@ -277,7 +276,7 @@ ImmaturePointStatus ImmaturePoint::traceOn(FrameHessian* frame,const Mat33f &hos
 					ptx, pty, 0.0f, energy);
 
 
-		errors[i] = energy;
+		errors.push_back(energy);
 		if(energy < bestEnergy)
 		{
 			bestU = ptx; bestV = pty; bestEnergy = energy; bestIdx = i;
