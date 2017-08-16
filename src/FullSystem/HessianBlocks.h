@@ -411,6 +411,8 @@ struct PointHessian
 	float weights[MAX_RES_PER_POINT];		// host-weights for respective residuals.
 
 
+	int timestepsSinceLastObserved = 0;
+//	bool was_good_enough_to_marg = false;
 
 	float u,v;
 	int idx;
@@ -463,26 +465,46 @@ struct PointHessian
     inline ~PointHessian() {assert(efPoint==0); release(); instanceCounter--;}
 
 
-	inline bool isOOB(const std::vector<FrameHessian*>& toKeep, const std::vector<FrameHessian*>& toMarg) const
+	inline bool isOOB(const std::vector<FrameHessian*>& toKeep, const std::vector<FrameHessian*>& toMarg)
 	{
 
-		int visInToMarg = 0;
-		for(PointFrameResidual* r : residuals)
-		{
-			if(r->state_state != ResState::IN) continue;
-			for(FrameHessian* k : toMarg)
-				if(r->target == k) visInToMarg++;
+//		int visInToMarg = 0;
+//		for(PointFrameResidual* r : residuals)
+//		{
+//			if(r->state_state != ResState::IN) continue;
+//			for(FrameHessian* k : toMarg)
+//				if(r->target == k) visInToMarg++;
+//		}
+//		// check if it was good, but now it's not
+//		if((int)residuals.size() >= setting_minGoodActiveResForMarg &&
+//				numGoodResiduals > setting_minGoodResForMarg+10 &&
+//				(int)residuals.size()-visInToMarg < setting_minGoodActiveResForMarg) {
+//		  return true;
+////		  was_good_enough_to_marg = true;
+//		}
+
+//    if (was_good_enough_to_marg ) {
+//      // no longer good enough to retain
+//      if ((int)residuals.size()-visInToMarg < setting_minGoodActiveResForMarg){
+//        --timestepsSinceLastObserved;
+//      } else {
+//        timestepsSinceLastObserved = timesteps_to_retain_unobserved_pts;
+//      }
+//    }
+
+
+		if(lastResiduals[0].second == ResState::OOB) {
+		  timestepsSinceLastObserved++;
+	    if (timestepsSinceLastObserved >= settings_timestepsToRetainUnobservedPts) {
+	      printf("#### haven't observed point in recently enough\n");
+	      return true;
+	    }
+		} else {
+		  if(timestepsSinceLastObserved > 0) {
+		    printf("#### WAS OOB BUT AM NOW VISIBLE (frames since last observed = %d)\n", timestepsSinceLastObserved);
+		  }
+		  timestepsSinceLastObserved = 0;
 		}
-		if((int)residuals.size() >= setting_minGoodActiveResForMarg &&
-				numGoodResiduals > setting_minGoodResForMarg+10 &&
-				(int)residuals.size()-visInToMarg < setting_minGoodActiveResForMarg)
-			return true;
-
-
-
-
-
-		if(lastResiduals[0].second == ResState::OOB) return true;
 		if(residuals.size() < 2) return false;
 		if(lastResiduals[0].second == ResState::OUTLIER && lastResiduals[1].second == ResState::OUTLIER) return true;
 		return false;

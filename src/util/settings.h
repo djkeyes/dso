@@ -62,6 +62,7 @@ extern float setting_maxAffineWeight;
 extern float setting_kfGlobalWeight;
 
 
+extern int settings_timestepsToRetainUnobservedPts;
 extern bool setting_useCoarserTracking;
 
 

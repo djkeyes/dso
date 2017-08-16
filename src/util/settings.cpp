@@ -42,6 +42,7 @@ float setting_maxShiftWeightRT= 0.02f * (640+480);
 float setting_kfGlobalWeight = 1;   // general weight on threshold, the larger the more KF's are taken (e.g., 2 = double the amount of KF's).
 float setting_maxAffineWeight= 2;
 
+int settings_timestepsToRetainUnobservedPts = 1;
 bool setting_useCoarserTracking = false;
 
 
