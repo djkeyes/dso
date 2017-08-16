@@ -34,7 +34,8 @@ int pyrLevelsUsed = PYR_LEVELS;
 
 /* Parameters controlling when KF's are taken */
 float setting_keyframesPerSecond = 0;   // if !=0, takes a fixed number of KF per second.
-bool setting_realTimeMaxKF = false;   // if true, takes as many KF's as possible (will break the system if the camera stays stationary)
+bool setting_realTimeMaxKF = true;   // if true, takes as many KF's as possible (will break the system if the camera stays stationary)
+bool setting_makeAllKFs = false; // if true, really force all frames to be KF's (will probable need to increase setting_maxFrames to make up for the superfluous KFs).
 float setting_maxShiftWeightT= 0.04f * (640+480);
 float setting_maxShiftWeightR= 0.0f * (640+480);
 float setting_maxShiftWeightRT= 0.02f * (640+480);

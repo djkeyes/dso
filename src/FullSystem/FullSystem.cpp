@@ -902,7 +902,7 @@ void FullSystem::addActiveFrame( ImageAndExposure* image, int id )
 
 
 		lock.unlock();
-		deliverTrackedFrame(fh, needToMakeKF);
+		deliverTrackedFrame(fh, needToMakeKF || setting_makeAllKFs);
 		return;
 	}
 }

@@ -54,6 +54,7 @@ extern int pyrLevelsUsed;
 
 extern float setting_keyframesPerSecond;
 extern bool setting_realTimeMaxKF;
+extern bool setting_makeAllKFs;
 extern float setting_maxShiftWeightT;
 extern float setting_maxShiftWeightR;
 extern float setting_maxShiftWeightRT;
