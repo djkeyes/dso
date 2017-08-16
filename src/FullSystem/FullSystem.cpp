@@ -850,6 +850,7 @@ void FullSystem::addActiveFrame( ImageAndExposure* image, int id )
     shell->timestamp = image->timestamp;
     shell->incoming_id = id;
 	fh->shell = shell;
+	shell->fh = fh;
 	allFrameHistory.push_back(shell);
 
 

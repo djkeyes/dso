@@ -31,6 +31,8 @@ namespace dso
 {
 
 
+struct FrameHessian;
+
 class FrameShell
 {
 public:
@@ -54,6 +56,7 @@ public:
 	int marginalizedAt;
 	double movedByOpt;
 
+	FrameHessian* fh;
 
 	inline FrameShell()
 	{
@@ -66,6 +69,7 @@ public:
 		statistics_outlierResOnThis=statistics_goodResOnThis=0;
 		trackingRef=0;
 		camToTrackingRef = SE3();
+		fh = nullptr;
 	}
 };
 
