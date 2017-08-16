@@ -180,7 +180,8 @@ bool KeyFrameDisplay::refreshPC(bool canRefresh, float scaledTH, float absTH, in
 				my_absTH != absTH ||
 				my_displayMode != mode ||
 				my_minRelBS != minBS ||
-				my_sparsifyFactor != sparsity;
+				my_sparsifyFactor != sparsity ||
+				!active;
 	}
 
 	if(!needRefresh) return false;
@@ -202,6 +203,10 @@ bool KeyFrameDisplay::refreshPC(bool canRefresh, float scaledTH, float absTH, in
 	Vec3b* tmpColorBuffer = new Vec3b[numSparsePoints*patternNum];
 	int vertexBufferNumPoints=0;
 
+  if (my_displayMode==2 && !active){
+    prevActive = false;
+  }
+
 	for(int i=0;i<numSparsePoints;i++)
 	{
 		/* display modes:
@@ -212,7 +217,12 @@ bool KeyFrameDisplay::refreshPC(bool canRefresh, float scaledTH, float absTH, in
 		 */
 
 		if(my_displayMode==1 && originalInputSparse[i].status != 1 && originalInputSparse[i].status!= 2) continue;
-		if(my_displayMode==2 && originalInputSparse[i].status != 1) continue;
+    if(my_displayMode==2 && originalInputSparse[i].status != 1) continue;
+    if (my_displayMode==2 && !active){
+      // don't display anything, all these points are inactive!
+      printf("skipping, camera is inactive!\n");
+      continue;
+    }
 		if(my_displayMode>2) continue;
 
 		if(originalInputSparse[i].idpeth < 0) continue;
@@ -292,12 +302,12 @@ bool KeyFrameDisplay::refreshPC(bool canRefresh, float scaledTH, float absTH, in
 		}
 	}
 
-	if(vertexBufferNumPoints==0)
-	{
-		delete[] tmpColorBuffer;
-		delete[] tmpVertexBuffer;
-		return true;
-	}
+//	if(vertexBufferNumPoints==0)
+//	{
+//		delete[] tmpColorBuffer;
+//		delete[] tmpVertexBuffer;
+//		return true;
+//	}
 
 	numGLBufferGoodPoints = vertexBufferNumPoints;
 	if(numGLBufferGoodPoints > numGLBufferPoints)

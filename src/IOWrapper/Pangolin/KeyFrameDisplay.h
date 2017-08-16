@@ -85,7 +85,8 @@ public:
 	void drawPC(float pointSize);
 
 	int id;
-	bool active;
+  bool prevActive;
+  bool active;
 	SE3 camToWorld;
 
     inline bool operator < (const KeyFrameDisplay& other) const

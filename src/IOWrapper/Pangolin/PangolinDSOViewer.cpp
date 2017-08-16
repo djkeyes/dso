@@ -155,7 +155,7 @@ void PangolinDSOViewer::run()
 
 	pangolin::Var<int> settings_nPts("ui.activePoints",setting_desiredPointDensity, 50,5000, false);
 	pangolin::Var<int> settings_nCandidates("ui.pointCandidates",setting_desiredImmatureDensity, 50,5000, false);
-	pangolin::Var<int> settings_nMaxFrames("ui.maxFrames",setting_maxFrames, 4,10, false);
+	pangolin::Var<int> settings_nMaxFrames("ui.maxFrames",setting_maxFrames, 4,50, false);
 	pangolin::Var<double> settings_kfFrequency("ui.kfFrequency",setting_kfGlobalWeight,0.1,3, false);
 	pangolin::Var<double> settings_gradHistAdd("ui.minGradAdd",setting_minGradHistAdd,0,15, false);
 
@@ -178,8 +178,15 @@ void PangolinDSOViewer::run()
 			int refreshed=0;
 			for(KeyFrameDisplay* fh : keyframes)
 			{
-				float blue[3] = {0,0,1};
-				if(this->settings_showKFCameras) fh->drawCam(1,blue,0.1);
+        float blue[3] = {0,0,1};
+        float green[3] = {0,1,0};
+				if(this->settings_showKFCameras) {
+				  if(fh->active){
+				    fh->drawCam(1,green,0.1);
+				  } else {
+	          fh->drawCam(1,blue,0.1);
+				  }
+				}
 
 
 				refreshed =+ (int)(fh->refreshPC(refreshed < 10, this->settings_scaledVarTH, this->settings_absVarTH,
@@ -290,15 +297,16 @@ void PangolinDSOViewer::run()
 
 
 	printf("QUIT Pangolin thread!\n");
-	printf("I'll just kill the whole process.\nSo Long, and Thanks for All the Fish!\n");
-
-	exit(1);
+//	printf("I'll just kill the whole process.\nSo Long, and Thanks for All the Fish!\n");
+//
+//	exit(1);
 }
 
 
 void PangolinDSOViewer::close()
 {
 	running = false;
+	pangolin::DestroyWindow("Main");
 }
 
 void PangolinDSOViewer::join()
@@ -480,7 +488,12 @@ void PangolinDSOViewer::publishKeyframes(
 			keyframesByKFID[fh->frameID] = kfd;
 			keyframes.push_back(kfd);
 		}
-		keyframesByKFID[fh->frameID]->setFromKF(fh, HCalib);
+    keyframesByKFID[fh->frameID]->setFromKF(fh, HCalib);
+
+    if (keyframesByKFID[fh->frameID]->active) {
+      keyframesByKFID[fh->frameID]->prevActive = true;
+    }
+    keyframesByKFID[fh->frameID]->active = !final;
 	}
 }
 void PangolinDSOViewer::publishCamPose(FrameShell* frame,
