@@ -29,6 +29,8 @@
  *      Author: engelj
  */
 
+#include <iostream>
+
 #include "FullSystem/CoarseInitializer.h"
 #include "FullSystem/FullSystem.h"
 #include "FullSystem/HessianBlocks.h"
@@ -78,6 +80,12 @@ bool CoarseInitializer::trackFrame(FrameHessian* newFrameHessian, std::vector<IO
 {
 	newFrame = newFrameHessian;
 
+	// if the first frame had an initial guess, but this one didn't, just discard the current frame
+	// wait until we get a second initial guess, so we can track scale
+	if (firstFrame->initial_guess && ! newFrame->initial_guess){
+	  return false;
+	}
+
     for(IOWrap::Output3DWrapper* ow : wraps)
         ow->pushLiveFrame(newFrameHessian);
 
@@ -108,6 +116,11 @@ bool CoarseInitializer::trackFrame(FrameHessian* newFrameHessian, std::vector<IO
 
 
 	SE3 refToNew_current = thisToNext;
+	if (newFrame->initial_guess && firstFrame->initial_guess){
+    SE3 ref_to_world = *firstFrame->initial_guess.get();
+    SE3 world_to_new = newFrame->initial_guess->inverse();
+	  refToNew_current = thisToNext = world_to_new * ref_to_world;
+	}
 	AffLight refToNew_aff_current = thisToNext_aff;
 
 	if(firstFrame->ab_exposure>0 && newFrame->ab_exposure>0)
@@ -169,7 +182,13 @@ bool CoarseInitializer::trackFrame(FrameHessian* newFrameHessian, std::vector<IO
 				inc = - (wM * (Hl.ldlt().solve(bl)));	//=-H^-1 * b.
 
 
-			SE3 refToNew_new = SE3::exp(inc.head<6>().cast<double>()) * refToNew_current;
+			// If we have an initial guess, just keep this constant
+			SE3 refToNew_new;
+		  if (newFrame->initial_guess && firstFrame->initial_guess) {
+		    refToNew_new = refToNew_current;
+		  } else {
+	      refToNew_new = SE3::exp(inc.head<6>().cast<double>()) * refToNew_current;
+		  }
 			AffLight refToNew_aff_new = refToNew_aff_current;
 			refToNew_aff_new.a += inc[6];
 			refToNew_aff_new.b += inc[7];
@@ -312,7 +331,7 @@ void CoarseInitializer::debugPlot(int lvl, std::vector<IOWrap::Output3DWrapper*>
 			iRImg.setPixel9(point->u+0.5f,point->v+0.5f,Vec3b(0,0,0));
 
 		else
-			iRImg.setPixel9(point->u+0.5f,point->v+0.5f,makeRainbow3B(point->iR*fac));
+			iRImg.setPixel9(point->u+0.5f,point->v+0.5f,makeJet3B(point->iR*fac));
 	}
 
 
@@ -844,6 +863,10 @@ void CoarseInitializer::setFirst(	CalibHessian* HCalib, FrameHessian* newFrameHe
 
 	for(int i=0;i<pyrLevelsUsed;i++)
 		dGrads[i].setZero();
+
+	if (firstFrame->initial_guess){
+    firstFrame->shell->camToWorld = *firstFrame->initial_guess.get();
+  }
 
 }
 

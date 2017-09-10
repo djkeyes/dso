@@ -733,6 +733,7 @@ void CoarseTracker::debugPlotIDepthMap(float* minID_pt, float* maxID_pt, std::ve
 		std::sort(allID.begin(), allID.end());
 		int n = allID.size()-1;
 
+		// TODO: this segfaults if allID.size() == 0
 		float minID_new = allID[(int)(n*0.05)];
 		float maxID_new = allID[(int)(n*0.95)];
 

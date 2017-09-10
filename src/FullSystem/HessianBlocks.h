@@ -27,8 +27,9 @@
 
  
 #include "util/globalCalib.h"
-#include "vector"
+#include <vector>
  
+#include <memory>
 #include <iostream>
 #include <fstream>
 #include "util/NumType.h"
@@ -120,7 +121,7 @@ struct FrameHessian
 	Eigen::Vector3f* dIp[PYR_LEVELS];	 // coarse tracking / coarse initializer. NAN in [0] only.
 	float* absSquaredGrad[PYR_LEVELS];  // only used for pixel select (histograms etc.). no NAN.
 
-
+	std::unique_ptr<SE3> initial_guess = nullptr;
 
 
 
@@ -187,8 +188,13 @@ struct FrameHessian
 		state_scaled[8] = SCALE_A * state[8];
 		state_scaled[9] = SCALE_B * state[9];
 
-		PRE_worldToCam = SE3::exp(w2c_leftEps()) * get_worldToCam_evalPT();
-		PRE_camToWorld = PRE_worldToCam.inverse();
+//		if (initial_guess) {
+//      PRE_camToWorld = *initial_guess;
+//      PRE_worldToCam = PRE_camToWorld.inverse();
+//		} else {
+      PRE_worldToCam = SE3::exp(w2c_leftEps()) * get_worldToCam_evalPT();
+      PRE_camToWorld = PRE_worldToCam.inverse();
+//		}
 		//setCurrentNullspace();
 	};
 	inline void setStateScaled(const Vec10 &state_scaled)
@@ -496,13 +502,9 @@ struct PointHessian
 		if(lastResiduals[0].second == ResState::OOB) {
 		  timestepsSinceLastObserved++;
 	    if (timestepsSinceLastObserved >= settings_timestepsToRetainUnobservedPts) {
-	      printf("#### haven't observed point in recently enough\n");
 	      return true;
 	    }
 		} else {
-		  if(timestepsSinceLastObserved > 0) {
-		    printf("#### WAS OOB BUT AM NOW VISIBLE (frames since last observed = %d)\n", timestepsSinceLastObserved);
-		  }
 		  timestepsSinceLastObserved = 0;
 		}
 		if(residuals.size() < 2) return false;

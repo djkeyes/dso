@@ -56,6 +56,9 @@
 
 #include <cmath>
 #include <random>
+#include <memory>
+#include <iostream>
+#include <thread>
 
 namespace dso
 {
@@ -168,6 +171,7 @@ FullSystem::FullSystem()
 	mappingThread = boost::thread(&FullSystem::mappingLoop, this);
 	lastRefStopID=0;
 
+	hadInitialGuess = false;
 
 
 	minIdJetVisDebug = -1;
@@ -288,8 +292,24 @@ Vec4 FullSystem::trackNewCoarse(FrameHessian* fh)
 	AffLight aff_last_2_l = AffLight(0,0);
 
 	std::vector<SE3,Eigen::aligned_allocator<SE3>> lastF_2_fh_tries;
-	if(allFrameHistory.size() == 2)
-		for(unsigned int i=0;i<lastF_2_fh_tries.size();i++) lastF_2_fh_tries.push_back(SE3());
+	if(allFrameHistory.size() == 2) {
+		for(unsigned int i=0;i<lastF_2_fh_tries.size();i++) {
+		  lastF_2_fh_tries.push_back(SE3());
+		}
+
+    FrameShell* first = allFrameHistory[0];
+    if (first->poseValid && fh->initial_guess) {
+//      std::cout << "have initial guess after first 2 KFs, camToWorld="
+//           << fh->initial_guess->translation() << ", "
+//           << fh->initial_guess->unit_quaternion().coeffs().transpose() << std::endl;
+      // set the guess so that it cancels out with whatever is in slast
+      SE3 guess_cam_to_world = *fh->initial_guess.get();
+      SE3 first_to_world = first->camToWorld;
+      SE3 first_to_cur = guess_cam_to_world.inverse() * first_to_world;
+      lastF_2_fh_tries.clear();
+      lastF_2_fh_tries.push_back(first_to_cur );
+    }
+	}
 	else
 	{
 		FrameShell* slast = allFrameHistory[allFrameHistory.size()-2];
@@ -380,6 +400,33 @@ Vec4 FullSystem::trackNewCoarse(FrameHessian* fh)
 			lastF_2_fh_tries.clear();
 			lastF_2_fh_tries.push_back(SE3());
 		}
+
+	  if (lastF->shell->poseValid && fh->initial_guess) {
+//      std::cout
+//          << "lastF optimized vs lastF initial guess: " << std::endl;
+//      std::cout << "guess: "
+//          << lastF->initial_guess->translation().transpose() << ", "
+//          << lastF->initial_guess->unit_quaternion().coeffs().transpose() << std::endl;
+//      std::cout << "opt: "
+//          << lastF->shell->camToWorld.translation().transpose() << ", "
+//          << lastF->shell->camToWorld.unit_quaternion().coeffs().transpose() << std::endl;
+//      std::cout << "have initial guess, camToWorld="
+//         << fh->initial_guess->translation().transpose() << ", "
+//         << fh->initial_guess->unit_quaternion().coeffs().transpose() << std::endl;
+	    // set the guess so that it cancels out with whatever is in lastF
+	    SE3 world_to_fh = fh->initial_guess->inverse();
+	    SE3 lastF_to_world = lastF->shell->camToWorld;
+	    SE3 lastF_to_cur = world_to_fh * lastF_to_world;
+
+//      std::cout << "have initial guess, last_to_cur="
+//           << lastF_to_cur.translation().transpose() << ", "
+//           << lastF_to_cur.unit_quaternion().coeffs().transpose() << std::endl;
+      lastF_2_fh_tries.clear();
+      lastF_2_fh_tries.push_back(lastF_to_cur);
+//      std::cout << "lastF_to_cur="
+//           << lastF_to_cur.translation().transpose() << ", "
+//           << lastF_to_cur.unit_quaternion().coeffs().transpose() << std::endl;
+	  }
 	}
 
 
@@ -430,7 +477,7 @@ Vec4 FullSystem::trackNewCoarse(FrameHessian* fh)
 		// do we have a new winner?
 		if(trackingIsGood && std::isfinite((float)coarseTracker->lastResiduals[0]) && !(coarseTracker->lastResiduals[0] >=  achievedRes[0]))
 		{
-			//printf("take over. minRes %f -> %f!\n", achievedRes[0], coarseTracker->lastResiduals[0]);
+//			printf("take over. minRes %f -> %f!\n", achievedRes[0], coarseTracker->lastResiduals[0]);
 			flowVecs = coarseTracker->lastFlowIndicators;
 			aff_g2l = aff_g2l_this;
 			lastF_2_fh = lastF_2_fh_this;
@@ -464,7 +511,11 @@ Vec4 FullSystem::trackNewCoarse(FrameHessian* fh)
 	lastCoarseRMSE = achievedRes;
 
 	// no lock required, as fh is not used anywhere yet.
-	fh->shell->camToTrackingRef = lastF_2_fh.inverse();
+	if(fh->initial_guess) {
+	  fh->shell->camToTrackingRef = lastF_2_fh_tries[0].inverse();
+	} else {
+    fh->shell->camToTrackingRef = lastF_2_fh.inverse();
+	}
 	fh->shell->trackingRef = lastF->shell;
 	fh->shell->aff_g2l = aff_g2l;
 	fh->shell->camToWorld = fh->shell->trackingRef->camToWorld * fh->shell->camToTrackingRef;
@@ -598,6 +649,11 @@ void FullSystem::activatePointsMT()
 	std::vector<ImmaturePoint*> toOptimize; toOptimize.reserve(20000);
 
 
+  int immature_never_traced_deleted = 0;
+  int immature_outlier_deleted = 0;
+  int immature_host_flagged_deleted = 0;
+  int immature_oob_deleted = 0;
+  int immature_oob2_deleted = 0;
 	for(FrameHessian* host : frameHessians)		// go through all active frames
 	{
 		if(host == newestHs) continue;
@@ -615,6 +671,12 @@ void FullSystem::activatePointsMT()
 			// delete points that have never been traced successfully, or that are outlier on the last trace.
 			if(!std::isfinite(ph->idepth_max) || ph->lastTraceStatus == IPS_OUTLIER)
 			{
+			  if(!std::isfinite(ph->idepth_max)){
+	        immature_never_traced_deleted++;
+			  } else {
+	        immature_outlier_deleted++;
+			  }
+
 //				immature_invalid_deleted++;
 				// remove point.
 				delete ph;
@@ -638,6 +700,11 @@ void FullSystem::activatePointsMT()
 				// if point will be out afterwards, delete it instead.
 				if(ph->host->flaggedForMarginalization || ph->lastTraceStatus == IPS_OOB)
 				{
+				  if(ph->host->flaggedForMarginalization) {
+				    immature_host_flagged_deleted++;
+				  } else {
+            immature_oob_deleted++;
+				  }
 //					immature_notReady_deleted++;
 					delete ph;
 					host->immaturePoints[i]=0;
@@ -665,6 +732,7 @@ void FullSystem::activatePointsMT()
 			}
 			else
 			{
+			  immature_oob2_deleted++;
 				delete ph;
 				host->immaturePoints[i]=0;
 			}
@@ -672,8 +740,12 @@ void FullSystem::activatePointsMT()
 	}
 
 
-//	printf("ACTIVATE: %d. (del %d, notReady %d, marg %d, good %d, marg-skip %d)\n",
-//			(int)toOptimize.size(), immature_deleted, immature_notReady, immature_needMarg, immature_want, immature_margskip);
+	//  printf("ACTIVATE: %d. (del %d, notReady %d, marg %d, good %d, marg-skip %d)\n",
+	//      (int)toOptimize.size(), immature_deleted, immature_notReady, immature_needMarg, immature_want, immature_margskip);
+
+//  printf("ACTIVATE: %d. (never traced %d, outlier %d, marg %d, oob before %d, oob now %d)\n",
+//      (int)toOptimize.size(), immature_never_traced_deleted, immature_outlier_deleted,
+//      immature_host_flagged_deleted, immature_oob_deleted, immature_oob2_deleted);
 
 	std::vector<PointHessian*> optimized; optimized.resize(toOptimize.size());
 
@@ -684,6 +756,7 @@ void FullSystem::activatePointsMT()
 		activatePointsMT_Reductor(&optimized, &toOptimize, 0, toOptimize.size(), 0, 0);
 
 
+	int oob_after_opt_deleted = 0;
 	for(unsigned k=0;k<toOptimize.size();k++)
 	{
 		PointHessian* newpoint = optimized[k];
@@ -701,6 +774,7 @@ void FullSystem::activatePointsMT()
 		}
 		else if(newpoint == (PointHessian*)((long)(-1)) || ph->lastTraceStatus==IPS_OOB)
 		{
+		  oob_after_opt_deleted++;
 			delete ph;
 			ph->host->immaturePoints[ph->idxInImmaturePoints]=0;
 		}
@@ -709,6 +783,7 @@ void FullSystem::activatePointsMT()
 			assert(newpoint == 0 || newpoint == (PointHessian*)((long)(-1)));
 		}
 	}
+//  printf("ACTIVATE: (OOB afterwards %d)\n", oob_after_opt_deleted);
 
 
 	for(FrameHessian* host : frameHessians)
@@ -830,20 +905,20 @@ void FullSystem::flagPointsForRemoval()
 			}
 		}
 	}
-
+//  printf("FLAG POINTS FOR REMOVAL: dropped %d with no residuals, dropped %d oob\n", flag_nores, flag_oob);
 }
 
 
-void FullSystem::addActiveFrame( ImageAndExposure* image, int id )
+void FullSystem::addActiveFrame( ImageAndExposure* image, int id , std::unique_ptr<SE3> initial_guess)
 {
 
     if(isLost) return;
 	boost::unique_lock<boost::mutex> lock(trackMutex);
 
-
 	// =========================== add into allFrameHistory =========================
 	FrameHessian* fh = new FrameHessian();
 	FrameShell* shell = new FrameShell();
+
 	shell->camToWorld = SE3(); 		// no lock required, as fh is not used anywhere yet.
 	shell->aff_g2l = AffLight(0,0);
     shell->marginalizedAt = shell->id = allFrameHistory.size();
@@ -851,12 +926,46 @@ void FullSystem::addActiveFrame( ImageAndExposure* image, int id )
     shell->incoming_id = id;
 	fh->shell = shell;
 	shell->fh = fh;
+
+  if (initial_guess) {
+    fh->initial_guess = move(initial_guess);
+    shell->camToWorld = *fh->initial_guess.get();
+    hadInitialGuess = true;
+  } else if (hadInitialGuess) {
+    // If an earlier frame had GT, wait until we more frames with GT,
+    // so the alignment is correct.
+    if(allFrameHistory.size() < 30){
+      fh->shell->poseValid = false;
+//      delete fh;
+      return;
+    }
+  }
+//  printf("\n");
+
 	allFrameHistory.push_back(shell);
 
 
-	// =========================== make Images / derivatives etc. =========================
+//  if(initialized) {
+//
+//    boost::unique_lock<boost::mutex> lock(mapMutex);
+//
+//    fh->idx = frameHessians.size();
+//    frameHessians.push_back(fh);
+//    fh->frameID = allKeyFramesHistory.size();
+//    allKeyFramesHistory.push_back(fh->shell);
+//
+//    fh->PRE_camToWorld = shell->camToWorld;
+//    for(IOWrap::Output3DWrapper* ow : outputWrapper) {
+//        ow->publishCamPose(fh->shell, &Hcalib);
+//        ow->publishKeyframes(frameHessians, false, &Hcalib);
+//    }
+//    std::this_thread::sleep_for(std::chrono::milliseconds(200));
+//    return;
+//  }
+
+  // =========================== make Images / derivatives etc. =========================
 	fh->ab_exposure = image->exposure_time;
-    fh->makeImages(image->image, &Hcalib);
+  fh->makeImages(image->image, &Hcalib);
 
 
 
@@ -878,6 +987,27 @@ void FullSystem::addActiveFrame( ImageAndExposure* image, int id )
 		}
 		else
 		{
+      std::cout << "pose from initializer:"
+                << fh->shell->camToWorld.translation().transpose()
+                << ", "
+                << fh->shell->camToWorld.unit_quaternion()
+                       .coeffs()
+                       .transpose()
+                << std::endl;
+      if (fh->initial_guess) {
+        std::cout << "pose from guess:"
+                  << fh->initial_guess->translation().transpose()
+                  << ", "
+                  << fh->initial_guess->unit_quaternion()
+                         .coeffs()
+                         .transpose()
+                  << std::endl;
+      }
+
+//      for (IOWrap::Output3DWrapper* ow : outputWrapper) {
+//              ow->publishCamPose(fh->shell, &Hcalib);
+//              ow->publishKeyframes(frameHessians, false, &Hcalib);
+//      }
 			// if still initializing
 			fh->shell->poseValid = false;
 			delete fh;
@@ -895,12 +1025,29 @@ void FullSystem::addActiveFrame( ImageAndExposure* image, int id )
 
 
 		Vec4 tres = trackNewCoarse(fh);
-		if(!std::isfinite((double)tres[0]) || !std::isfinite((double)tres[1]) || !std::isfinite((double)tres[2]) || !std::isfinite((double)tres[3]))
-        {
-            printf("Initial Tracking failed: LOST!\n");
-			isLost=true;
-            return;
-        }
+//    std::cout << "pose from coarse tracker:"
+//              << fh->shell->camToWorld.translation().transpose()
+//              << ", "
+//              << fh->shell->camToWorld.unit_quaternion()
+//                     .coeffs()
+//                     .transpose()
+//              << std::endl;
+//    if (fh->initial_guess) {
+//      std::cout << "pose from guess:"
+//                << fh->initial_guess->translation().transpose()
+//                << ", "
+//                << fh->initial_guess->unit_quaternion()
+//                       .coeffs()
+//                       .transpose()
+//                << std::endl;
+//    }
+
+//		if(!std::isfinite((double)tres[0]) || !std::isfinite((double)tres[1]) || !std::isfinite((double)tres[2]) || !std::isfinite((double)tres[3]))
+//        {
+//            printf("Initial Tracking failed: LOST!\n");
+//			isLost=true;
+//            return;
+//        }
 
 		bool needToMakeKF = false;
 		if(setting_keyframesPerSecond > 0)
@@ -919,7 +1066,7 @@ void FullSystem::addActiveFrame( ImageAndExposure* image, int id )
 					setting_kfGlobalWeight*setting_maxShiftWeightR *  sqrtf((double)tres[2]) / (wG[0]+hG[0]) +
 					setting_kfGlobalWeight*setting_maxShiftWeightRT * sqrtf((double)tres[3]) / (wG[0]+hG[0]) +
 					setting_kfGlobalWeight*setting_maxAffineWeight * fabs(logf((float)refToFh[0])) > 1 ||
-					2*coarseTracker->firstCoarseRMSE < tres[0];
+					!(2*coarseTracker->firstCoarseRMSE >= tres[0]);
 
 		}
 
@@ -956,7 +1103,6 @@ void FullSystem::deliverTrackedFrame(FrameHessian* fh, bool needKF)
 			lastRefStopID = coarseTracker->refFrameID;
 		}
 		else handleKey( IOWrap::waitKey(1) );
-
 
 
 		if(needKF) makeKeyFrame(fh);
@@ -1301,17 +1447,25 @@ void FullSystem::initializeFromInitializer(FrameHessian* newFrame)
 	// really no lock required, as we are initializing.
 	{
 		boost::unique_lock<boost::mutex> crlock(shellPoseMutex);
-		firstFrame->shell->camToWorld = SE3();
+		if (firstFrame->initial_guess) {
+      firstFrame->shell->camToWorld = *firstFrame->initial_guess;
+		} else {
+	    firstFrame->shell->camToWorld = SE3();
+		}
 		firstFrame->shell->aff_g2l = AffLight(0,0);
 		firstFrame->setEvalPT_scaled(firstFrame->shell->camToWorld.inverse(),firstFrame->shell->aff_g2l);
 		firstFrame->shell->trackingRef=0;
 		firstFrame->shell->camToTrackingRef = SE3();
 
-		newFrame->shell->camToWorld = firstToNew.inverse();
+    if (newFrame->initial_guess) {
+      newFrame->shell->camToWorld = *newFrame->initial_guess;
+    } else {
+      newFrame->shell->camToWorld = firstToNew.inverse();
+    }
 		newFrame->shell->aff_g2l = AffLight(0,0);
 		newFrame->setEvalPT_scaled(newFrame->shell->camToWorld.inverse(),newFrame->shell->aff_g2l);
 		newFrame->shell->trackingRef = firstFrame->shell;
-		newFrame->shell->camToTrackingRef = firstToNew.inverse();
+    newFrame->shell->camToTrackingRef = firstFrame->shell->camToWorld.inverse() * newFrame->shell->camToWorld;
 
 	}
 
@@ -1342,7 +1496,7 @@ void FullSystem::makeNewTraces(FrameHessian* newFrame, float* gtDepth)
 		else newFrame->immaturePoints.push_back(impt);
 
 	}
-	//printf("MADE %d IMMATURE POINTS!\n", (int)newFrame->immaturePoints.size());
+//	printf("MADE %d IMMATURE POINTS!\n", (int)newFrame->immaturePoints.size());
 
 }
 

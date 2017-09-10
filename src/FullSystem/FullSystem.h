@@ -41,6 +41,7 @@
 #include "FullSystem/PixelSelector2.h"
 
 #include <math.h>
+#include <memory>
 
 namespace dso
 {
@@ -136,7 +137,7 @@ public:
 	virtual ~FullSystem();
 
 	// adds a new frame, and creates point & residual structs.
-	void addActiveFrame(ImageAndExposure* image, int id);
+	void addActiveFrame(ImageAndExposure* image, int id, std::unique_ptr<SE3> initial_guess = nullptr);
 
 	// marginalizes a frame. drops / marginalizes points & residuals.
 	void marginalizeFrame(FrameHessian* frame);
@@ -157,7 +158,7 @@ public:
 	bool initFailed;
 	bool initialized;
 	bool linearizeOperation;
-
+	bool hadInitialGuess;
 
 	void setGammaFunction(float* BInv);
 	void setOriginalCalib(const VecXf &originalCalib, int originalW, int originalH);
