@@ -123,6 +123,7 @@ private:
 	int settings_pointCloudMode;
 	float settings_minRelBS;
 	int settings_sparsity;
+	bool settings_drawLines;
 
 
 	// timings

@@ -78,7 +78,7 @@ public:
 	void setFromF(FrameShell* fs, CalibHessian* HCalib);
 
 	// copies & filters internal data to GL buffer for rendering. if nothing to do: does nothing.
-	bool refreshPC(bool canRefresh, float scaledTH, float absTH, int mode, float minBS, int sparsity);
+	bool refreshPC(bool canRefresh, float scaledTH, float absTH, int mode, float minBS, int sparsity, bool draw_lines);
 
 	// renders cam & pointcloud.
 	void drawCam(float lineWidth = 1, float* color = 0, float sizeFactor=1);
@@ -104,6 +104,7 @@ private:
 	int my_sparsifyFactor;
 	int my_displayMode;
 	float my_minRelBS;
+	bool my_drawLines;
 	bool needRefresh;
 
 

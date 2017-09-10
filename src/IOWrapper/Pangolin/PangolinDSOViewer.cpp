@@ -144,7 +144,8 @@ void PangolinDSOViewer::run()
 	pangolin::Var<bool> settings_showCoarseTracking("ui.showCoarseTracking",false,true);
 
 
-	pangolin::Var<int> settings_sparsity("ui.sparsity",1,1,20,false);
+  pangolin::Var<bool> settings_drawLines("ui.drawLines",false, true);
+  pangolin::Var<int> settings_sparsity("ui.sparsity",1,1,20,false);
 	pangolin::Var<double> settings_scaledVarTH("ui.relVarTH",0.001,1e-10,1e10, true);
 	pangolin::Var<double> settings_absVarTH("ui.absVarTH",0.001,1e-10,1e10, true);
 	pangolin::Var<double> settings_minRelBS("ui.minRelativeBS",0.1,0,1, false);
@@ -190,7 +191,7 @@ void PangolinDSOViewer::run()
 
 
 				refreshed =+ (int)(fh->refreshPC(refreshed < 10, this->settings_scaledVarTH, this->settings_absVarTH,
-						this->settings_pointCloudMode, this->settings_minRelBS, this->settings_sparsity));
+						this->settings_pointCloudMode, this->settings_minRelBS, this->settings_sparsity, this->settings_drawLines));
 				fh->drawPC(1);
 			}
 			if(this->settings_showCurrentCamera) currentCam->drawCam(2,0,0.2);
@@ -272,7 +273,8 @@ void PangolinDSOViewer::run()
 	    this->settings_absVarTH = settings_absVarTH.Get();
 	    this->settings_scaledVarTH = settings_scaledVarTH.Get();
 	    this->settings_minRelBS = settings_minRelBS.Get();
-	    this->settings_sparsity = settings_sparsity.Get();
+      this->settings_sparsity = settings_sparsity.Get();
+      this->settings_drawLines = settings_drawLines.Get();
 
 	    setting_desiredPointDensity = settings_nPts.Get();
 	    setting_desiredImmatureDensity = settings_nCandidates.Get();

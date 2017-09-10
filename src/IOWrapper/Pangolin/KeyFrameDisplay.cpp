@@ -36,8 +36,6 @@
 #include "FullSystem/ImmaturePoint.h"
 #include "util/FrameShell.h"
 
-
-
 namespace dso
 {
 namespace IOWrap
@@ -56,6 +54,7 @@ KeyFrameDisplay::KeyFrameDisplay()
 
 	needRefresh=true;
 
+	my_drawLines = false;
 	my_scaledTH =1e10;
 	my_absTH = 1e10;
 	my_displayMode = 1;
@@ -171,7 +170,7 @@ KeyFrameDisplay::~KeyFrameDisplay()
 		delete[] originalInputSparse;
 }
 
-bool KeyFrameDisplay::refreshPC(bool canRefresh, float scaledTH, float absTH, int mode, float minBS, int sparsity)
+bool KeyFrameDisplay::refreshPC(bool canRefresh, float scaledTH, float absTH, int mode, float minBS, int sparsity, bool draw_lines)
 {
 	if(canRefresh)
 	{
@@ -181,17 +180,19 @@ bool KeyFrameDisplay::refreshPC(bool canRefresh, float scaledTH, float absTH, in
 				my_displayMode != mode ||
 				my_minRelBS != minBS ||
 				my_sparsifyFactor != sparsity ||
-				!active;
+				!active ||
+				my_drawLines != draw_lines;
 	}
 
 	if(!needRefresh) return false;
 	needRefresh=false;
 
-	my_scaledTH = scaledTH;
+  my_scaledTH = scaledTH;
 	my_absTH = absTH;
 	my_displayMode = mode;
 	my_minRelBS = minBS;
 	my_sparsifyFactor = sparsity;
+  my_drawLines = draw_lines;
 
 
 	// if there are no vertices, done!
@@ -199,8 +200,15 @@ bool KeyFrameDisplay::refreshPC(bool canRefresh, float scaledTH, float absTH, in
 		return false;
 
 	// make data
-	Vec3f* tmpVertexBuffer = new Vec3f[numSparsePoints*patternNum];
-	Vec3b* tmpColorBuffer = new Vec3b[numSparsePoints*patternNum];
+	Vec3f* tmpVertexBuffer;
+  Vec3b* tmpColorBuffer;
+  if (my_drawLines) {
+    tmpVertexBuffer = new Vec3f[2*numSparsePoints*patternNum];
+    tmpColorBuffer = new Vec3b[2*numSparsePoints*patternNum];
+  } else {
+    tmpVertexBuffer = new Vec3f[numSparsePoints*patternNum];
+    tmpColorBuffer = new Vec3b[numSparsePoints*patternNum];
+  }
 	int vertexBufferNumPoints=0;
 
   if (my_displayMode==2 && !active){
@@ -232,6 +240,9 @@ bool KeyFrameDisplay::refreshPC(bool canRefresh, float scaledTH, float absTH, in
 		float depth4 = depth*depth; depth4*= depth4;
 		float var = (1.0f / (originalInputSparse[i].idepth_hessian+0.01));
 
+    float depthm3 = 1.0f / std::max(originalInputSparse[i].idpeth - 3.f/std::sqrt(originalInputSparse[i].idepth_hessian), 0.00001f);
+    float depthp3 = 1.0f / std::max(originalInputSparse[i].idpeth + 3.f/std::sqrt(originalInputSparse[i].idepth_hessian), 0.00001f);
+
 		if(var * depth4 > my_scaledTH)
 			continue;
 
@@ -242,59 +253,38 @@ bool KeyFrameDisplay::refreshPC(bool canRefresh, float scaledTH, float absTH, in
 			continue;
 
 
-		for(int pnt=0;pnt<patternNum;pnt++)
+		for(int pnt=0;pnt<1/*patternNum*/;pnt++)
 		{
 
 			if(my_sparsifyFactor > 1 && rand()%my_sparsifyFactor != 0) continue;
 			int dx = patternP[pnt][0];
 			int dy = patternP[pnt][1];
 
-			tmpVertexBuffer[vertexBufferNumPoints][0] = ((originalInputSparse[i].u+dx)*fxi + cxi) * depth;
-			tmpVertexBuffer[vertexBufferNumPoints][1] = ((originalInputSparse[i].v+dy)*fyi + cyi) * depth;
-			tmpVertexBuffer[vertexBufferNumPoints][2] = depth*(1 + 2*fxi * (rand()/(float)RAND_MAX-0.5f));
-
-
-
-			if(my_displayMode==0)
-			{
-				if(originalInputSparse[i].status==0)
-				{
-					tmpColorBuffer[vertexBufferNumPoints][0] = 0;
-					tmpColorBuffer[vertexBufferNumPoints][1] = 255;
-					tmpColorBuffer[vertexBufferNumPoints][2] = 255;
-				}
-				else if(originalInputSparse[i].status==1)
-				{
-					tmpColorBuffer[vertexBufferNumPoints][0] = 0;
-					tmpColorBuffer[vertexBufferNumPoints][1] = 255;
-					tmpColorBuffer[vertexBufferNumPoints][2] = 0;
-				}
-				else if(originalInputSparse[i].status==2)
-				{
-					tmpColorBuffer[vertexBufferNumPoints][0] = 0;
-					tmpColorBuffer[vertexBufferNumPoints][1] = 0;
-					tmpColorBuffer[vertexBufferNumPoints][2] = 255;
-				}
-				else if(originalInputSparse[i].status==3)
-				{
-					tmpColorBuffer[vertexBufferNumPoints][0] = 255;
-					tmpColorBuffer[vertexBufferNumPoints][1] = 0;
-					tmpColorBuffer[vertexBufferNumPoints][2] = 0;
-				}
-				else
-				{
-					tmpColorBuffer[vertexBufferNumPoints][0] = 255;
-					tmpColorBuffer[vertexBufferNumPoints][1] = 255;
-					tmpColorBuffer[vertexBufferNumPoints][2] = 255;
-				}
-
+			if (my_drawLines) {
+        tmpVertexBuffer[2*vertexBufferNumPoints][0] = ((originalInputSparse[i].u+dx)*fxi + cxi) * depthm3;
+        tmpVertexBuffer[2*vertexBufferNumPoints][1] = ((originalInputSparse[i].v+dy)*fyi + cyi) * depthm3;
+        tmpVertexBuffer[2*vertexBufferNumPoints][2] = depthm3;
+        tmpVertexBuffer[2*vertexBufferNumPoints+1][0] = ((originalInputSparse[i].u+dx)*fxi + cxi) * depthp3;
+        tmpVertexBuffer[2*vertexBufferNumPoints+1][1] = ((originalInputSparse[i].v+dy)*fyi + cyi) * depthp3;
+        tmpVertexBuffer[2*vertexBufferNumPoints+1][2] = depthp3;
+			} else {
+	      tmpVertexBuffer[vertexBufferNumPoints][0] = ((originalInputSparse[i].u+dx)*fxi + cxi) * depth;
+	      tmpVertexBuffer[vertexBufferNumPoints][1] = ((originalInputSparse[i].v+dy)*fyi + cyi) * depth;
+	      tmpVertexBuffer[vertexBufferNumPoints][2] = depth*(1 + 2*fxi * (rand()/(float)RAND_MAX-0.5f));
 			}
-			else
-			{
+
+      if (my_drawLines) {
+        tmpColorBuffer[2*vertexBufferNumPoints][0] = originalInputSparse[i].color[pnt];
+        tmpColorBuffer[2*vertexBufferNumPoints][1] = originalInputSparse[i].color[pnt];
+        tmpColorBuffer[2*vertexBufferNumPoints][2] = originalInputSparse[i].color[pnt];
+        tmpColorBuffer[2*vertexBufferNumPoints+1][0] = originalInputSparse[i].color[pnt];
+        tmpColorBuffer[2*vertexBufferNumPoints+1][1] = originalInputSparse[i].color[pnt];
+        tmpColorBuffer[2*vertexBufferNumPoints+1][2] = originalInputSparse[i].color[pnt];
+      } else {
 				tmpColorBuffer[vertexBufferNumPoints][0] = originalInputSparse[i].color[pnt];
 				tmpColorBuffer[vertexBufferNumPoints][1] = originalInputSparse[i].color[pnt];
 				tmpColorBuffer[vertexBufferNumPoints][2] = originalInputSparse[i].color[pnt];
-			}
+      }
 			vertexBufferNumPoints++;
 
 
@@ -309,14 +299,27 @@ bool KeyFrameDisplay::refreshPC(bool canRefresh, float scaledTH, float absTH, in
 //		return true;
 //	}
 
-	numGLBufferGoodPoints = vertexBufferNumPoints;
+	if (my_drawLines) {
+	  numGLBufferGoodPoints = 2*vertexBufferNumPoints;
+	} else {
+	  numGLBufferGoodPoints = vertexBufferNumPoints;
+	}
 	if(numGLBufferGoodPoints > numGLBufferPoints)
 	{
-		numGLBufferPoints = vertexBufferNumPoints*1.3;
-		vertexBuffer.Reinitialise(pangolin::GlArrayBuffer, numGLBufferPoints, GL_FLOAT, 3, GL_DYNAMIC_DRAW );
+	  if (my_drawLines) {
+	    numGLBufferPoints = 2*vertexBufferNumPoints;
+	  } else {
+	    numGLBufferPoints = vertexBufferNumPoints;
+	  }
+	  numGLBufferPoints *= 1.3;
+		if(my_drawLines) {
+	    vertexBuffer.Reinitialise(pangolin::GlArrayBuffer, 2*numGLBufferPoints, GL_FLOAT, 3, GL_DYNAMIC_DRAW );
+		} else {
+		  vertexBuffer.Reinitialise(pangolin::GlArrayBuffer, numGLBufferPoints, GL_FLOAT, 3, GL_DYNAMIC_DRAW );
+		}
 		colorBuffer.Reinitialise(pangolin::GlArrayBuffer, numGLBufferPoints, GL_UNSIGNED_BYTE, 3, GL_DYNAMIC_DRAW );
 	}
-	vertexBuffer.Upload(tmpVertexBuffer, sizeof(float)*3*numGLBufferGoodPoints, 0);
+  vertexBuffer.Upload(tmpVertexBuffer, sizeof(float)*3*numGLBufferGoodPoints, 0);
 	colorBuffer.Upload(tmpColorBuffer, sizeof(unsigned char)*3*numGLBufferGoodPoints, 0);
 	bufferValid=true;
 	delete[] tmpColorBuffer;
@@ -390,6 +393,7 @@ void KeyFrameDisplay::drawPC(float pointSize)
 		glMultMatrixf((GLfloat*)m.data());
 
 		glPointSize(pointSize);
+		glLineWidth(pointSize);
 
 
 		colorBuffer.Bind();
@@ -397,9 +401,14 @@ void KeyFrameDisplay::drawPC(float pointSize)
 		glEnableClientState(GL_COLOR_ARRAY);
 
 		vertexBuffer.Bind();
-		glVertexPointer(vertexBuffer.count_per_element, vertexBuffer.datatype, 0, 0);
-		glEnableClientState(GL_VERTEX_ARRAY);
-		glDrawArrays(GL_POINTS, 0, numGLBufferGoodPoints);
+
+    glVertexPointer(vertexBuffer.count_per_element, vertexBuffer.datatype, 0, 0);
+    glEnableClientState(GL_VERTEX_ARRAY);
+    if(my_drawLines) {
+      glDrawArrays(GL_LINES, 0, numGLBufferGoodPoints);
+    } else {
+      glDrawArrays(GL_POINTS, 0, numGLBufferGoodPoints);
+    }
 		glDisableClientState(GL_VERTEX_ARRAY);
 		vertexBuffer.Unbind();
 
